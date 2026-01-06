@@ -14,9 +14,16 @@ datasource db {
 }
 
 model User {
-  id      Int     @id @default(autoincrement())
-  clerkId String  @unique
-  email   String  @unique
-  name    String?
+  id           Int     @id @default(autoincrement())
+  clerkId      String  @unique
+  email        String  @unique
+  name         String?
   access_token String?
+  lobby        Lobby?  @relation(fields: [lobbyId], references: [id])
+  lobbyId      Int?
+}
+
+model Lobby {
+  id    Int @id @default(autoincrement())
+  users User[]
 }
