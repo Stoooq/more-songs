@@ -9,6 +9,7 @@ import { useState } from "react";
 export default function Home() {
   const [videoId, setVideoId] = useState<string>("");
   const [isPlaying, setIsPlaying] = useState(true);
+  const [lobbyId, setLobbyId] = useState<string>("");
   const router = useRouter()
 
   const handleVideoId = async () => {
@@ -19,7 +20,7 @@ export default function Home() {
   };
 
   const createLobby = async () => {
-    console.log("xxxx")
+    console.log("create lobby")
     try {
       const response = await fetch("/api/create-lobby", {
         method: "POST",
@@ -34,13 +35,44 @@ export default function Home() {
     }
   };
 
+  const joinLobby = async () => {
+    console.log("join lobby")
+    try {
+      const response = await fetch("/api/join-lobby", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          lobbyId: Number(lobbyId),
+        }),
+      });
+      const data = await response.json();
+      if (data.lobbyId) {
+        console.log("Joining lobby:", data.lobbyId);
+        router.push("/lobby")
+      }
+    } catch (error) {
+      console.error("Failed to join lobby:", error);
+    }
+  }
+
   return (
     <>
       <div className="w-250 mx-auto flex flex-col gap-12">
         <div className="text-7xl font-bold">More songs</div>
         <div className="flex w-full gap-12">
           <Button className="flex-1 text-xl font-bold p-8" onClick={createLobby}>Create lobby</Button>
-          <Button className="flex-1 text-xl font-bold p-8">Join lobby</Button>
+          <div className="flex-1">
+            <input
+              type="number"
+              placeholder="Enter Lobby ID"
+              value={lobbyId}
+              onChange={(e) => setLobbyId(e.target.value)}
+              className="border p-2 w-full"
+            />
+            <Button className="w-full text-xl font-bold p-8 mt-2" onClick={joinLobby}>Join lobby</Button>
+          </div>
         </div>
         {/* <button onClick={handleVideoId}>Pobierz Video ID</button> */}
 

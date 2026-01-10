@@ -10,23 +10,24 @@ export async function POST() {
     }
 
     const user = await prisma.user.findFirst({
-        where: {
-            clerkId,
-        }
-    })
+      where: {
+        clerkId,
+      },
+    });
 
     if (!user) {
-        return new NextResponse("user not found", { status: 401 });
+      return new NextResponse("user not found", { status: 401 });
     }
 
     const lobby = await prisma.lobby.create({
       data: {
-        users: {
-          connect: {
-            id: user.id,
-          },
-        },
+        hostId: user.clerkId,
       },
+    });
+
+    await prisma.user.update({
+      where: { clerkId },
+      data: { lobbyId: lobby.id },
     });
 
     return NextResponse.json({ lobbyId: lobby.id });

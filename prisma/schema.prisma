@@ -24,6 +24,7 @@ model User {
 }
 
 model Lobby {
-  id    Int @id @default(autoincrement())
-  users User[]
+  id     Int    @id @default(autoincrement())
+  users  User[]
+  hostId String
 }
