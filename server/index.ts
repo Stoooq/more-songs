@@ -2,9 +2,10 @@ import "dotenv/config";
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { Server } from "socket.io";
-import type { Server as HTTPServer } from "node:http";
+import { get, type Server as HTTPServer } from "node:http";
 import prisma from "@/lib/prisma";
 import { User } from "@/app/generated/prisma/client";
+import { getYouTubeVideos } from "@/lib/getYoutubeVideos";
 
 console.log("[socket] DATABASE_URL =", process.env.DATABASE_URL);
 
@@ -62,9 +63,12 @@ function clearLobbyTimers(lobbyId: string) {
   lobbyTimers.delete(lobbyId);
 }
 
-async function startRoundInDb(lobbyId: string, round: number) {
+async function startRoundInDb(lobbyId: string, round: number, musics: {id: string; title: string}[]) {
   const now = new Date();
   const roundEndsAt = new Date(now.getTime() + ROUND_SECONDS * 1000);
+  const randomIndex = Math.floor(Math.random() * musics.length);
+  const music = musics[randomIndex];
+  const musicsTitles = musics.map((m) => m.title)
 
   await prisma.lobby.update({
     where: { id: Number(lobbyId) },
@@ -73,6 +77,7 @@ async function startRoundInDb(lobbyId: string, round: number) {
       round,
       roundEndsAt,
       phaseEndsAt: null,
+      currentMusic: music.id,
     },
   });
 
@@ -89,6 +94,9 @@ async function startRoundInDb(lobbyId: string, round: number) {
     round: lobby.round,
     timeLeft: ROUND_SECONDS,
     scores: toScores(lobby.users),
+    musicId: music.id,
+    musicTitle: music.title,
+    musicsTitles: musicsTitles
   });
 
   clearLobbyTimers(lobbyId);
@@ -119,14 +127,15 @@ async function startRoundInDb(lobbyId: string, round: number) {
 
     if (left <= 0) {
       clearLobbyTimers(lobbyId);
-      await revealRoundInDb(lobbyId);
+      musics.splice(randomIndex, 1);
+      await revealRoundInDb(lobbyId, musics);
     }
   }, 1000);
 
   lobbyTimers.set(lobbyId, { tick });
 }
 
-async function revealRoundInDb(lobbyId: string) {
+async function revealRoundInDb(lobbyId: string, musics: {id: string; title: string}[]) {
   const lobby = await prisma.lobby.findFirst({
     where: { id: Number(lobbyId) },
     select: { round: true },
@@ -171,7 +180,7 @@ async function revealRoundInDb(lobbyId: string) {
       return;
     }
 
-    await startRoundInDb(lobbyId, fresh.round + 1);
+    await startRoundInDb(lobbyId, fresh.round + 1, musics);
   }, BETWEEN_ROUNDS_SECONDS * 1000);
 
   lobbyTimers.set(lobbyId, { between });
@@ -257,7 +266,7 @@ io.on("connection", async (socket) => {
 
   socket.on(
     "start-game",
-    async (payload: { lobbyId: string; userId: string }) => {
+    async (payload: { lobbyId: string; userId: string; }) => {
       const { lobbyId, userId } = payload;
       const key = roomKey(lobbyId);
 
@@ -266,7 +275,20 @@ io.on("connection", async (socket) => {
         include: { users: true },
       });
 
-      if (!lobby || lobby.hostId !== userId) return;
+      const user = await prisma.user.findFirst({
+        where: { clerkId: userId },
+      });
+
+      const playlist = await getYouTubeVideos({
+        access_token: user?.access_token || "",
+        playlistId: lobby?.playlistId || "PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj",
+      });
+      
+      const musics = playlist?.items.map((item) => ({ "id": item.contentDetails.videoId, "title": item.snippet.title + " - " + item.snippet.videoOwnerChannelTitle })) || [];
+
+      if (!lobby || lobby.hostId !== userId || !musics) return;
+
+      console.log(musics);
 
       io.to(key).emit("start-game");
 
@@ -286,14 +308,14 @@ io.on("connection", async (socket) => {
         },
       });
 
-      await startRoundInDb(lobbyId, 1);
+      await startRoundInDb(lobbyId, 1, musics);
     }
   );
 
   socket.on(
     "submit-guess",
-    async (payload: { lobbyId: string; userId: string; guess: string }) => {
-      const { lobbyId, userId, guess } = payload;
+    async (payload: { lobbyId: string; userId: string; guess: string, correctAnswer: string }) => {
+      const { lobbyId, userId, guess, correctAnswer } = payload;
 
       const lobby = await prisma.lobby.findFirst({
         where: { id: Number(lobbyId) },
@@ -302,10 +324,8 @@ io.on("connection", async (socket) => {
       if (!lobby) return;
       if (String(lobby.phase) !== "PLAYING") return;
 
-      const expected = (ANSWERS[lobby.round - 1] ?? "").trim().toLowerCase();
-      const given = (guess ?? "").trim().toLowerCase();
-      if (!expected || !given) return;
-      if (given !== expected) return;
+      if (!correctAnswer || !guess) return;
+      if (guess !== correctAnswer) return;
 
       const updated = await prisma.user.updateMany({
         where: {

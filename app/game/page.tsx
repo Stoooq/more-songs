@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { getSocket } from "@/lib/socket";
 import { useAuth } from "@clerk/nextjs";
+import { AudioPlayer } from "@/components/audio-player";
 
 type PlayerScore = {
   id: string;
@@ -24,6 +25,10 @@ export default function Game() {
   const [phase, setPhase] = useState<GamePhase>("waiting");
   const [round, setRound] = useState(1);
   const [timeLeft, setTimeLeft] = useState(30);
+  const [musicId, setMusicId] = useState<string>("");
+  const [musicTitle, setMusicTitle] = useState<string>("");
+  const [musicsTitles, setMusicsTitles] = useState<string[]>([]);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const [guess, setGuess] = useState("");
   const [lastAnswer, setLastAnswer] = useState<string | null>(null);
@@ -34,6 +39,18 @@ export default function Game() {
     () => [...scores].sort((a, b) => b.points - a.points),
     [scores]
   );
+
+  const suggestions = useMemo(() => {
+    if (!guess.trim()) return [];    
+    const parts = guess.toLowerCase().split(' ').filter(p => p.length > 0);
+    if(parts.length === 0) return [];
+
+    return musicsTitles
+        .filter((title) => {
+           const lowerTitle = title.toLowerCase();
+           return parts.every(part => lowerTitle.includes(part)) && title.toLowerCase() !== guess.toLowerCase();
+        }); 
+  }, [guess, musicsTitles]);
 
   const getLobby = async () => {
     const response = await fetch("/api/get-lobbyid", { method: "GET" });
@@ -53,6 +70,9 @@ export default function Game() {
       round: number;
       timeLeft: number;
       scores: PlayerScore[];
+      musicId: string;
+      musicTitle: string;
+      musicsTitles: string[];
     }) => {
       setPhase("playing");
       setRound(payload.round);
@@ -60,6 +80,9 @@ export default function Game() {
       setScores(payload.scores);
       setLastAnswer(null);
       setGuess("");
+      setMusicId(payload.musicId);
+      setMusicTitle(payload.musicTitle);
+      setMusicsTitles(payload.musicsTitles);
     };
 
     const onTick = (payload: {
@@ -117,6 +140,7 @@ export default function Game() {
       lobbyId,
       userId,
       guess: value,
+      correctAnswer: musicTitle,
     });
 
     setGuess("");
@@ -151,24 +175,46 @@ export default function Game() {
         </div>
       </div>
 
+      <div>
+        {musicId && (
+          <AudioPlayer videoId={musicId} duration={30} timeLeft={timeLeft} setIsPlaying={setIsPlaying}/>
+        )}
+      </div>
+
       <div className="flex flex-col gap-6 p-8 border rounded-xl bg-card text-card-foreground shadow-s">
         <h3 className="text-2xl font-bold opacity-70">Your guess</h3>
 
         <div className="flex gap-4">
-          <input
-            className="border p-4 w-full text-lg rounded-md"
-            placeholder={
-              phase === "playing"
-                ? "Type song title / artist..."
-                : "Round is not active"
-            }
-            value={guess}
-            onChange={(e) => setGuess(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submitGuess();
-            }}
-            disabled={phase !== "playing"}
-          />
+          <div className="relative w-full">
+            <input
+              className="border p-4 w-full text-lg rounded-md"
+              placeholder={
+                phase === "playing"
+                  ? "Type song title / artist..."
+                  : "Round is not active"
+              }
+              value={guess}
+              onChange={(e) => setGuess(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitGuess();
+              }}
+              disabled={phase !== "playing"}
+              autoComplete="off"
+            />
+            {suggestions.length > 0 && phase === "playing" && (
+              <ul className="absolute top-full left-0 w-full bg-card text-card-foreground border border-border rounded-md shadow-lg z-10 max-h-60 overflow-y-auto mt-1">
+                {suggestions.map((suggestion, idx) => (
+                  <li
+                    key={idx}
+                    className="px-4 py-2 hover:bg-muted cursor-pointer"
+                    onClick={() => setGuess(suggestion)}
+                  >
+                    {suggestion}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <Button
             className="text-xl font-bold px-8"
             onClick={submitGuess}
@@ -181,7 +227,7 @@ export default function Game() {
         {lastAnswer && (
           <div className="text-lg">
             <div className="opacity-70">Answer:</div>
-            <div className="text-2xl font-bold">{lastAnswer}</div>
+            <div className="text-2xl font-bold">{musicTitle}</div>
           </div>
         )}
       </div>

@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
+    const { playlistId } = await request.json();
     const { userId: clerkId } = await auth();
     console.log(clerkId)
     if (!clerkId) {
@@ -23,13 +24,16 @@ export async function POST() {
     const lobby = await prisma.lobby.create({
       data: {
         hostId: user.clerkId,
+        playlistId: playlistId || null,
       },
     });
+    console.log(lobby)
 
     await prisma.user.update({
       where: { clerkId },
       data: { lobbyId: lobby.id },
     });
+    console.log("Lobby created and user updated");
 
     return NextResponse.json({ lobbyId: lobby.id });
   } catch (err) {

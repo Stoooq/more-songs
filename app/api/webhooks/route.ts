@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import prisma from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
+  console.log("Received webhook request");
   try {
     const evt = await verifyWebhook(req);
     const { id } = evt.data;
@@ -27,8 +28,8 @@ export async function POST(req: NextRequest) {
       console.warn("Could not fetch OAuth token immediately (this is normal for new users):", tokenError);
     }
     console.log("Access token", accessToken)
-
-    if (eventType === "user.created") {
+    console.log(eventType)
+    if (eventType === "user.created" || eventType === "user.updated") {
       const { id, email_addresses, first_name } = evt.data;
       // console.log(evt.data)
       await prisma.user.upsert({
