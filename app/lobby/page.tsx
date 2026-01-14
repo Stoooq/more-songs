@@ -1,18 +1,25 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 import { getSocket } from "@/lib/socket";
 import { useAuth } from "@clerk/nextjs";
-import { User } from "../generated/prisma/client";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import type { User } from "../generated/prisma/client";
 
 export default function Lobby() {
   const [lobbyId, setLobbyId] = useState<string>("");
   const [players, setPlayers] = useState<User[]>([]);
+  const [hostId, setHostId] = useState<string>("");
+
   const { userId } = useAuth();
   const socket = getSocket();
   const router = useRouter();
+
+  const isHost = useMemo(
+    () => !!userId && !!hostId && userId === hostId,
+    [userId, hostId]
+  );
 
   const getLobby = async () => {
     const response = await fetch("/api/get-lobbyid", { method: "GET" });
@@ -28,26 +35,43 @@ export default function Lobby() {
     if (!lobbyId || !userId) return;
 
     socket.emit("join-lobby", { lobbyId, userId });
-    socket.on(
-      "lobby-updated",
-      ({ players }: { lobbyId: string; players: User[] }) => {
-        setPlayers(players);
-      }
-    );
-    socket.on("leave-lobby", () => {
-      socket.emit("leave-lobby", { lobbyId, userId });
-      router.push("/")
-    });
+
+    const onLobbyUpdated = (payload: {
+      lobbyId: string;
+      players: User[];
+      hostId?: string;
+    }) => {
+      setPlayers(payload.players);
+      if (payload.hostId) setHostId(payload.hostId);
+    };
+
+    const onStartGame = () => {
+      router.push("/game");
+    };
+
+    const onForceLeave = () => {
+      router.push("/");
+    };
+
+    socket.on("lobby-updated", onLobbyUpdated);
+    socket.on("start-game", onStartGame);
+    socket.on("leave-lobby", onForceLeave);
 
     return () => {
-      socket.off("lobby-updated");
-      socket.off("leave-lobby");
+      socket.off("lobby-updated", onLobbyUpdated);
+      socket.off("start-game", onStartGame);
+      socket.off("leave-lobby", onForceLeave);
     };
-  }, [lobbyId, userId, socket]);
+  }, [lobbyId, userId, socket, router]);
 
   const handleBackToMenu = () => {
     if (lobbyId && userId) socket.emit("leave-lobby", { lobbyId, userId });
     router.push("/");
+  };
+
+  const handleStartGame = () => {
+    if (!lobbyId || !userId) return;
+    socket.emit("start-game", { lobbyId, userId });
   };
 
   return (
@@ -70,9 +94,14 @@ export default function Lobby() {
       </div>
 
       <div className="flex w-full gap-12">
-        <Button className="flex-1 text-xl font-bold p-8" disabled={!lobbyId}>
+        <Button
+          className="flex-1 text-xl font-bold p-8"
+          onClick={handleStartGame}
+          disabled={!lobbyId || !isHost}
+        >
           Start Game
         </Button>
+
         <Button
           className="flex-1 text-xl font-bold p-8"
           variant="outline"
@@ -85,8 +114,8 @@ export default function Lobby() {
       <div className="mt-8 text-lg">
         <h3 className="font-bold mb-2">Players:</h3>
         <ul className="list-disc pl-5 opacity-70">
-          {players.map((player) => (
-            <div key={player.id}>{player.name}</div>
+          {players.map((p) => (
+            <li key={p.id}>{p.name ?? p.email ?? p.clerkId}</li>
           ))}
         </ul>
       </div>
