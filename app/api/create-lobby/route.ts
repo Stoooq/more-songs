@@ -4,7 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 
 export async function POST(request: NextRequest) {
   try {
-    const { playlistId } = await request.json();
+    const { playlistId, rounds } = await request.json();
     const { userId: clerkId } = await auth();
     console.log(clerkId)
     if (!clerkId) {
@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
       data: {
         hostId: user.clerkId,
         playlistId: playlistId || null,
+        rounds: rounds
       },
     });
     console.log(lobby)

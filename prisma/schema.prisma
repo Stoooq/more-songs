@@ -30,6 +30,7 @@ model User {
   lobbyId          Int?
   points           Int     @default(0)
   lastCorrectRound Int     @default(0)
+  globalPoints     Int     @default(0)
 }
 
 model Lobby {
@@ -37,6 +38,7 @@ model Lobby {
   users       User[]
   hostId      String
   round       Int        @default(0)
+  rounds      Int
   phase       LobbyPhase @default(WAITING)
   roundEndsAt DateTime?
   phaseEndsAt DateTime?

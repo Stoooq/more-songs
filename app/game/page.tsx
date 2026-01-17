@@ -37,19 +37,24 @@ export default function Game() {
 
   const sortedScores = useMemo(
     () => [...scores].sort((a, b) => b.points - a.points),
-    [scores]
+    [scores],
   );
 
   const suggestions = useMemo(() => {
-    if (!guess.trim()) return [];    
-    const parts = guess.toLowerCase().split(' ').filter(p => p.length > 0);
-    if(parts.length === 0) return [];
+    if (!guess.trim()) return [];
+    const parts = guess
+      .toLowerCase()
+      .split(" ")
+      .filter((p) => p.length > 0);
+    if (parts.length === 0) return [];
 
-    return musicsTitles
-        .filter((title) => {
-           const lowerTitle = title.toLowerCase();
-           return parts.every(part => lowerTitle.includes(part)) && title.toLowerCase() !== guess.toLowerCase();
-        }); 
+    return musicsTitles.filter((title) => {
+      const lowerTitle = title.toLowerCase();
+      return (
+        parts.every((part) => lowerTitle.includes(part)) &&
+        title.toLowerCase() !== guess.toLowerCase()
+      );
+    });
   }, [guess, musicsTitles]);
 
   const getLobby = async () => {
@@ -115,6 +120,7 @@ export default function Game() {
     }) => {
       setPhase("finished");
       setScores(payload.scores);
+      router.push("/lobby");
     };
 
     socket.on("game-started", onGameStarted);
@@ -177,7 +183,12 @@ export default function Game() {
 
       <div>
         {musicId && (
-          <AudioPlayer videoId={musicId} duration={30} timeLeft={timeLeft} setIsPlaying={setIsPlaying}/>
+          <AudioPlayer
+            videoId={musicId}
+            duration={30}
+            timeLeft={timeLeft}
+            setIsPlaying={setIsPlaying}
+          />
         )}
       </div>
 

@@ -24,9 +24,8 @@ const io = new Server(httpServer as HTTPServer, {
 
 type PlayerScore = { id: string; name: string; points: number };
 
-const MAX_ROUNDS = 3;
 const ROUND_SECONDS = 30;
-const BETWEEN_ROUNDS_SECONDS = 10;
+const BETWEEN_ROUNDS_SECONDS = 3;
 
 const ANSWERS = ["more songs", "next song", "final song"];
 
@@ -157,11 +156,11 @@ async function revealRoundInDb(lobbyId: string, musics: {id: string; title: stri
   const between = setTimeout(async () => {
     const fresh = await prisma.lobby.findFirst({
       where: { id: Number(lobbyId) },
-      select: { round: true },
+      select: { round: true, rounds: true },
     });
     if (!fresh) return;
 
-    if (fresh.round >= MAX_ROUNDS) {
+    if (fresh.round >= fresh.rounds) {
       await prisma.lobby.update({
         where: { id: Number(lobbyId) },
         data: { phase: "FINISHED", phaseEndsAt: null, roundEndsAt: null },
@@ -171,6 +170,20 @@ async function revealRoundInDb(lobbyId: string, musics: {id: string; title: stri
         where: { id: Number(lobbyId) },
         include: { users: true },
       });
+
+      if (withUsers?.users) {
+        withUsers.users.forEach(async (user) => {
+          await prisma.user.update({
+            where: {
+              id: user.id
+            },
+            data: {
+              globalPoints: user.globalPoints + user.points,
+              points: 0,
+            }
+          })
+        });
+      }
 
       io.to(key).emit("game-finished", {
         lobbyId,
