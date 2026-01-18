@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getSocket } from "@/lib/socket";
 import { useAuth } from "@clerk/nextjs";
 import { AudioPlayer } from "@/components/audio-player";
@@ -17,10 +17,21 @@ type GamePhase = "waiting" | "playing" | "revealing" | "finished";
 
 export default function Game() {
   const router = useRouter();
-  const socket = getSocket();
+
+  // Upewnij się, że instancja socketu jest stała
+  const socket = useMemo(() => getSocket(), []);
+
   const { userId } = useAuth();
+  const userIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    userIdRef.current = userId ?? null;
+  }, [userId]);
 
   const [lobbyId, setLobbyId] = useState<string>("");
+  const lobbyIdRef = useRef<string>("");
+  useEffect(() => {
+    lobbyIdRef.current = lobbyId;
+  }, [lobbyId]);
 
   const [phase, setPhase] = useState<GamePhase>("waiting");
   const [round, setRound] = useState(1);
@@ -68,8 +79,6 @@ export default function Game() {
   }, []);
 
   useEffect(() => {
-    if (!lobbyId || !userId) return;
-
     const onGameStarted = (payload: {
       lobbyId: string;
       round: number;
@@ -79,6 +88,9 @@ export default function Game() {
       musicTitle: string;
       musicsTitles: string[];
     }) => {
+      // jeśli lobbyId już znamy, filtruj eventy
+      if (lobbyIdRef.current && payload.lobbyId !== lobbyIdRef.current) return;
+
       setPhase("playing");
       setRound(payload.round);
       setTimeLeft(payload.timeLeft);
@@ -95,6 +107,7 @@ export default function Game() {
       round: number;
       timeLeft: number;
     }) => {
+      if (lobbyIdRef.current && payload.lobbyId !== lobbyIdRef.current) return;
       setTimeLeft(payload.timeLeft);
     };
 
@@ -103,6 +116,7 @@ export default function Game() {
       round: number;
       answer: string;
     }) => {
+      if (lobbyIdRef.current && payload.lobbyId !== lobbyIdRef.current) return;
       setPhase("revealing");
       setLastAnswer(payload.answer);
     };
@@ -111,6 +125,7 @@ export default function Game() {
       lobbyId: string;
       scores: PlayerScore[];
     }) => {
+      if (lobbyIdRef.current && payload.lobbyId !== lobbyIdRef.current) return;
       setScores(payload.scores);
     };
 
@@ -118,6 +133,7 @@ export default function Game() {
       lobbyId: string;
       scores: PlayerScore[];
     }) => {
+      if (lobbyIdRef.current && payload.lobbyId !== lobbyIdRef.current) return;
       setPhase("finished");
       setScores(payload.scores);
       router.push("/lobby");
@@ -136,7 +152,7 @@ export default function Game() {
       socket.off("scores-updated", onScoresUpdated);
       socket.off("game-finished", onGameFinished);
     };
-  }, [lobbyId, userId, socket, router]);
+  }, [socket, router]);
 
   const submitGuess = () => {
     const value = guess.trim();
